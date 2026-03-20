@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import PostCard from "../components/PostCard";
 import EmojiPicker from "emoji-picker-react";
-import { API_BASE } from "../api/config";
+import { API_BASE } from "../api/api";
 
 const Home = () => {
   const [posts, setPosts] = useState([]);
