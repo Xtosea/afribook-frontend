@@ -1,4 +1,4 @@
-// src/api/api.j
+// src/api/api.js
 // src/api/config.js
 export const API_BASE = "https://afribook-backend.onrender.com/api";
 
