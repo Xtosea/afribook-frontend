@@ -1,5 +1,6 @@
 // src/api/api.js
-export const API_BASE = "http://localhost:5000"; // change if needed
+// src/api/config.js
+export const API_URL = "https://afribook-backend.onrender.com/api";
 
 export const fetchWithToken = async (url, token, options = {}) => {
   try {
