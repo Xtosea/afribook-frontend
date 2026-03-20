@@ -1,299 +1,231 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
+import { API_BASE, fetchWithToken } from "../api/api";
 import PostCard from "../components/PostCard";
-import EmojiPicker from "emoji-picker-react";
-import { API_BASE } from "../api/api";
 import { Link } from "react-router-dom";
 
 const Home = () => {
-  const [posts, setPosts] = useState([]);
-  const [newPost, setNewPost] = useState("");
-  const [mediaFiles, setMediaFiles] = useState([]);
-  const [mediaPreview, setMediaPreview] = useState([]);
-  const [showExtras, setShowExtras] = useState(false);
-  const [feeling, setFeeling] = useState("");
-  const [location, setLocation] = useState("");
-  const [taggedFriends, setTaggedFriends] = useState([]);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [friendsList, setFriendsList] = useState([]);
-
-  const ws = useRef(null);
   const token = localStorage.getItem("token");
   const currentUserId = localStorage.getItem("userId");
 
-  // Safe fetch helper
-  const safeFetch = async (url, options = {}) => {
-    const res = await fetch(url, options);
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error("Server returned HTML instead of JSON");
-    }
-  };
+  const [posts, setPosts] = useState([]);
+  const [newPost, setNewPost] = useState("");
+  const [mediaFiles, setMediaFiles] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [location, setLocation] = useState("");
+  const [feeling, setFeeling] = useState("");
+  const [taggedFriends, setTaggedFriends] = useState([]);
 
-  // Fetch posts
+  // Fetch homepage posts
   const fetchPosts = async () => {
+    if (!token) return;
     try {
-      const data = await safeFetch(`${API_BASE}/api/posts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // Fix media URLs
+      const data = await fetchWithToken(`${API_BASE}/api/posts`, token);
       const fixedPosts = data.map(post => ({
         ...post,
         media: post.media?.map(m => ({
           ...m,
-          url: m.url.startsWith("http") ? m.url : `${API_BASE}${m.url}`,
+          url: m.url.startsWith("http") ? m.url : `${API_BASE}/uploads/posts/${m.url}`,
         })),
         user: {
           ...post.user,
           profilePic: post.user?.profilePic
             ? post.user.profilePic.startsWith("http")
               ? post.user.profilePic
-              : `${API_BASE}${post.user.profilePic}`
+              : `${API_BASE}/uploads/profiles/${post.user.profilePic}`
             : `${API_BASE}/uploads/profiles/default-profile.png`,
         },
       }));
-
       setPosts(fixedPosts);
     } catch (err) {
-      console.error(err.message);
+      console.error("FETCH POSTS ERROR:", err);
     }
   };
 
-  // Fetch friends for tagging
-  const fetchFriends = async () => {
-    try {
-      const data = await safeFetch(`${API_BASE}/api/users/friends/${currentUserId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFriendsList(data);
-    } catch (err) {
-      console.error(err.message);
-    }
-  };
-
-  // WebSocket for real-time updates
-  useEffect(() => {
-    ws.current = new WebSocket(process.env.REACT_APP_WS_BASE || "wss://afribook-backend.onrender.com");
-
-    ws.current.onopen = () => {
-      console.log("✅ WebSocket connected");
-      if (currentUserId)
-        ws.current.send(JSON.stringify({ type: "REGISTER", userId: currentUserId }));
-    };
-
-    ws.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "NEW_POST") {
-        setPosts(prev => [data.post, ...prev]);
-      }
-    };
-
-    return () => ws.current && ws.current.close();
-  }, [currentUserId]);
-
-  // Initial fetch
   useEffect(() => {
     fetchPosts();
-    fetchFriends();
   }, []);
 
-  // Handle media selection and preview
-  const handleMediaChange = (e) => {
-    const files = Array.from(e.target.files);
-    setMediaFiles(files);
-    setMediaPreview(files.map(f => ({ preview: URL.createObjectURL(f), type: f.type })));
+  // Handle multiple file selection
+  const handleMediaChange = e => {
+    setMediaFiles([...e.target.files]);
   };
 
-  // Tag/untag friends
-  const handleTagFriend = (friend) => {
-    if (!taggedFriends.includes(friend._id)) {
-      setTaggedFriends([...taggedFriends, friend._id]);
-    } else {
-      setTaggedFriends(taggedFriends.filter(id => id !== friend._id));
-    }
-  };
-
-  // Create new post
-  const handleCreatePost = async () => {
+  // Handle post submission
+  const handleSubmitPost = async e => {
+    e.preventDefault();
     if (!newPost.trim() && mediaFiles.length === 0) return;
 
     const formData = new FormData();
     formData.append("content", newPost);
-    formData.append("feeling", feeling);
-    formData.append("location", location);
-    formData.append("taggedFriends", JSON.stringify(taggedFriends));
+    if (location) formData.append("location", location);
+    if (feeling) formData.append("feeling", feeling);
+    if (taggedFriends.length) formData.append("taggedFriends", JSON.stringify(taggedFriends));
     mediaFiles.forEach(file => formData.append("media", file));
 
     try {
-      setIsSubmitting(true);
-      const res = await fetch(`${API_BASE}/api/posts`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/api/posts`);
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
-      if (!res.ok) throw new Error("Post failed");
-
-      const data = await res.json();
-
-      // Fix media URLs for the new post
-      const newPostData = {
-        ...data.post,
-        media: data.post.media?.map(m => ({
-          ...m,
-          url: m.url.startsWith("http") ? m.url : `${API_BASE}${m.url}`,
-        })),
-        user: {
-          ...data.post.user,
-          profilePic: data.post.user?.profilePic
-            ? data.post.user.profilePic.startsWith("http")
-              ? data.post.user.profilePic
-              : `${API_BASE}${data.post.user.profilePic}`
-            : `${API_BASE}/uploads/profiles/default-profile.png`,
-        },
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percent);
+        }
       };
 
-      setPosts(prev => [newPostData, ...prev]);
+      xhr.onload = () => {
+        if (xhr.status === 200 || xhr.status === 201) {
+          const createdPost = JSON.parse(xhr.responseText);
 
-      // Reset form
-      setNewPost("");
-      setMediaFiles([]);
-      setMediaPreview([]);
-      setFeeling("");
-      setLocation("");
-      setTaggedFriends([]);
-      setShowExtras(false);
-      setShowEmoji(false);
+          // Fix media URLs for display
+          const fixedPost = {
+            ...createdPost,
+            media: createdPost.media?.map(m => ({
+              ...m,
+              url: m.url.startsWith("http") ? m.url : `${API_BASE}/uploads/posts/${m.url}`,
+            })),
+            user: {
+              ...createdPost.user,
+              profilePic: createdPost.user?.profilePic
+                ? createdPost.user.profilePic.startsWith("http")
+                  ? createdPost.user.profilePic
+                  : `${API_BASE}/uploads/profiles/${createdPost.user.profilePic}`
+                : `${API_BASE}/uploads/profiles/default-profile.png`,
+            },
+          };
+
+          setPosts([fixedPost, ...posts]);
+          setNewPost("");
+          setMediaFiles([]);
+          setLocation("");
+          setFeeling("");
+          setTaggedFriends([]);
+          setUploadProgress(0);
+        } else {
+          console.error("POST SUBMIT ERROR:", xhr.responseText);
+        }
+      };
+
+      xhr.send(formData);
     } catch (err) {
-      console.error(err);
-      alert("Failed to create post");
-    } finally {
-      setIsSubmitting(false);
+      console.error("POST SUBMIT EXCEPTION:", err);
     }
   };
 
+  // Like, comment, share handlers (update posts in state)
+  const handleLike = postId => {
+    setPosts(posts.map(p => {
+      if (p._id === postId) {
+        const liked = p.likes?.includes(currentUserId);
+        return {
+          ...p,
+          likes: liked
+            ? p.likes.filter(id => id !== currentUserId)
+            : [...(p.likes || []), currentUserId],
+        };
+      }
+      return p;
+    }));
+  };
+
+  const handleComment = (postId, text) => {
+    setPosts(posts.map(p => {
+      if (p._id === postId) {
+        return {
+          ...p,
+          comments: [...(p.comments || []), { _id: Date.now(), text, user: { _id: currentUserId, name: "You" } }],
+        };
+      }
+      return p;
+    }));
+  };
+
+  const handleShare = post => {
+    alert("Shared post: " + post._id);
+  };
+
   return (
-    <div className="container mx-auto py-4 flex flex-col lg:flex-row gap-6">
-      <div className="flex-1 space-y-4">
-        {/* CREATE POST */}
-        <div className="bg-white p-4 rounded shadow">
-          <textarea
-            value={newPost}
-            onChange={e => setNewPost(e.target.value)}
-            onFocus={() => setShowExtras(true)}
-            placeholder="What's on your mind?"
-            className="w-full border p-2 rounded"
-          />
+    <div className="container mx-auto py-6 space-y-6">
+      {/* CREATE POST */}
+      <div className="bg-white p-4 rounded shadow space-y-3">
+        <textarea
+          className="w-full border rounded p-2"
+          placeholder="What's on your mind?"
+          value={newPost}
+          onChange={e => setNewPost(e.target.value)}
+        />
 
-          {showExtras && (
-            <>
-              {/* Media Preview */}
-              {mediaPreview.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                  {mediaPreview.map((m, i) =>
-                    m.type.startsWith("image") ? (
-                      <img
-                        key={i}
-                        src={m.preview}
-                        alt={`preview-${i}`}
-                        className="w-full h-48 object-cover rounded"
-                      />
-                    ) : (
-                      <video
-                        key={i}
-                        src={m.preview}
-                        controls
-                        className="w-full h-48 rounded object-cover"
-                      />
-                    )
-                  )}
-                </div>
-              )}
+        <input type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} />
 
-              {/* Extra Post Options */}
-              <div className="flex flex-wrap gap-2 mt-2">
-                <input type="file" multiple onChange={handleMediaChange} />
-                <button
-                  onClick={() => setShowEmoji(!showEmoji)}
-                  className="px-3 py-1 bg-gray-200 rounded"
-                >
-                  {showEmoji ? "Hide Emoji" : "Add Emoji"}
-                </button>
-                <button
-                  onClick={handleCreatePost}
-                  className="px-4 py-2 bg-blue-500 text-white rounded"
-                >
-                  {isSubmitting ? "Posting..." : "Post"}
-                </button>
+        {mediaFiles.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto mt-2">
+            {mediaFiles.map((file, idx) => (
+              <div key={idx} className="relative">
+                {file.type.startsWith("image") ? (
+                  <img src={URL.createObjectURL(file)} alt={file.name} className="w-20 h-20 object-cover rounded" />
+                ) : (
+                  <video src={URL.createObjectURL(file)} className="w-20 h-20 rounded" />
+                )}
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* Emoji Picker */}
-              {showEmoji && (
-                <EmojiPicker
-                  onEmojiClick={(e, emojiObject) =>
-                    setNewPost(prev => prev + emojiObject.emoji)
-                  }
-                />
-              )}
+        {uploadProgress > 0 && (
+          <div className="w-full bg-gray-200 rounded h-2 mt-2">
+            <div className="bg-blue-500 h-2 rounded" style={{ width: `${uploadProgress}%` }}></div>
+          </div>
+        )}
 
-              {/* Tag Friends */}
-              {friendsList.length > 0 && (
-                <div className="flex gap-2 mt-2 flex-wrap">
-                  {friendsList.map(f => (
-                    <button
-                      key={f._id}
-                      className={`px-2 py-1 border rounded ${
-                        taggedFriends.includes(f._id) ? "bg-blue-200" : "bg-gray-100"
-                      }`}
-                      onClick={() => handleTagFriend(f)}
-                    >
-                      {f.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            placeholder="Feeling..."
+            value={feeling}
+            onChange={e => setFeeling(e.target.value)}
+            className="border rounded px-2 py-1 flex-1"
+          />
+          <input
+            type="text"
+            placeholder="Location..."
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            className="border rounded px-2 py-1 flex-1"
+          />
+          <input
+            type="text"
+            placeholder="Tag friends (comma separated)"
+            value={taggedFriends.join(", ")}
+            onChange={e => setTaggedFriends(e.target.value.split(",").map(f => f.trim()))}
+            className="border rounded px-2 py-1 flex-1"
+          />
         </div>
 
-        {/* POSTS */}
-        {posts.map(post => (
-          <PostCard
-            key={post._id}
-            post={post}
-            currentUserId={currentUserId}
-            onLike={async postId => {
-              await fetch(`${API_BASE}/api/posts/${postId}/like`, {
-                method: "PUT",
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              fetchPosts();
-            }}
-            onComment={async (postId, text) => {
-              try {
-                const res = await fetch(`${API_BASE}/api/posts/${postId}/comment`, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ text }),
-                });
-                if (!res.ok) throw new Error("Failed to comment");
-                fetchPosts();
-              } catch (err) {
-                console.error(err);
-              }
-            }}
-            onShare={post => {
-              navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
-              alert("Post link copied!");
-            }}
-          />
-        ))}
+        <button
+          onClick={handleSubmitPost}
+          className="px-4 py-2 bg-blue-500 text-white rounded mt-2"
+        >
+          Post
+        </button>
+      </div>
+
+      {/* POSTS */}
+      <div className="space-y-4">
+        {posts.length === 0 ? (
+          <p className="text-center text-gray-500">No posts yet.</p>
+        ) : (
+          posts.map(post => (
+            <PostCard
+              key={post._id}
+              post={post}
+              currentUserId={currentUserId}
+              onLike={handleLike}
+              onComment={handleComment}
+              onShare={handleShare}
+            />
+          ))
+        )}
       </div>
     </div>
   );
