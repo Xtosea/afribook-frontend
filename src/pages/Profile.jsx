@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import PostCard from "../components/PostCard";
 import { fetchWithToken, API_BASE } from "../api/api";
 
@@ -128,7 +128,6 @@ const Profile = () => {
 
   if (!user) return <p className="text-center mt-10">Loading profile...</p>;
 
-  // Profile + Cover photo URLs
   const profilePicUrl = profilePic
     ? URL.createObjectURL(profilePic)
     : fixUrl(user.profilePic, "/uploads/profiles/default-profile.png");
@@ -156,7 +155,9 @@ const Profile = () => {
       <div className="flex items-center space-x-6 bg-white p-4 rounded shadow">
         <img src={profilePicUrl} alt="profile" className="w-24 h-24 rounded-full object-cover" />
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{user.name}</h1>
+          <h1 className="text-2xl font-bold">
+            <Link to={`/profile/${finalUserId}`}>{user.name}</Link>
+          </h1>
 
           {!isEditing ? (
             <>
