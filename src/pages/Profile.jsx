@@ -26,6 +26,12 @@ const Profile = () => {
     if (!token) navigate("/login");
   }, [token, navigate]);
 
+  // Helper to fix URLs with fallback
+  const fixUrl = (url, fallback) => {
+    if (!url) return `${API_BASE}${fallback}`;
+    return url.startsWith("http") ? url : `${API_BASE}${url}`;
+  };
+
   // Fetch user info
   const fetchUser = async () => {
     if (!token) return;
@@ -45,7 +51,7 @@ const Profile = () => {
     }
   };
 
-  // Fetch user posts
+  // Fetch user's posts
   const fetchUserPosts = async () => {
     if (!token) return;
     try {
@@ -59,10 +65,8 @@ const Profile = () => {
         })),
         user: {
           ...post.user,
-          profilePic: post.user?.profilePic?.startsWith("http")
-            ? post.user.profilePic
-            : post.user?.profilePic
-            ? `${API_BASE}${post.user.profilePic}`
+          profilePic: post.user?.profilePic
+            ? fixUrl(post.user.profilePic, "/uploads/profiles/default-profile.png")
             : `${API_BASE}/uploads/profiles/default-profile.png`,
         },
       }));
@@ -73,7 +77,7 @@ const Profile = () => {
     }
   };
 
-  // Follow/unfollow
+  // Follow / Unfollow
   const handleFollow = async () => {
     try {
       await fetchWithToken(`${API_BASE}/api/users/${finalUserId}/follow`, token, { method: "PUT" });
@@ -84,11 +88,11 @@ const Profile = () => {
     }
   };
 
-  // Like and comment
-  const handleLike = async postId => { /* ...same as before */ };
-  const handleComment = async (postId, text) => { /* ...same as before */ };
+  // Like & comment placeholders
+  const handleLike = async (postId) => { /* implement if needed */ };
+  const handleComment = async (postId, text) => { /* implement if needed */ };
 
-  // Update profile (including profilePic + coverPhoto)
+  // Update profile (text + profile + cover)
   const handleUpdateProfile = async () => {
     if (!token) return;
     setSaving(true);
@@ -99,11 +103,10 @@ const Profile = () => {
       if (profilePic) formData.append("profilePic", profilePic);
       if (coverPhoto) formData.append("coverPhoto", coverPhoto);
 
-      const updatedUser = await fetchWithToken(
-        `${API_BASE}/api/users/${finalUserId}`,
-        token,
-        { method: "PUT", body: formData }
-      );
+      const updatedUser = await fetchWithToken(`${API_BASE}/api/users/${finalUserId}`, token, {
+        method: "PUT",
+        body: formData,
+      });
 
       setUser(updatedUser.user || updatedUser);
       setProfilePic(null);
@@ -125,18 +128,14 @@ const Profile = () => {
 
   if (!user) return <p className="text-center mt-10">Loading profile...</p>;
 
-  // Profile and cover photo URLs
+  // Profile + Cover photo URLs
   const profilePicUrl = profilePic
     ? URL.createObjectURL(profilePic)
-    : user.profilePic
-    ? user.profilePic
-    : `${API_BASE}/uploads/profiles/default-profile.png`;
+    : fixUrl(user.profilePic, "/uploads/profiles/default-profile.png");
 
   const coverPhotoUrl = coverPhoto
     ? URL.createObjectURL(coverPhoto)
-    : user.coverPhoto
-    ? user.coverPhoto
-    : `${API_BASE}/uploads/profiles/default-cover.png`;
+    : fixUrl(user.coverPhoto, "/uploads/profiles/default-cover.png");
 
   return (
     <div className="container mx-auto py-6 space-y-6">
