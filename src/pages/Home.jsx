@@ -23,32 +23,40 @@ const Home = () => {
   const safeFetch = async (url, options = {}) => {
     const res = await fetch(url, options);
     const text = await res.text();
-    try { return JSON.parse(text); } 
-    catch { throw new Error("Server returned HTML instead of JSON"); }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("Server returned HTML instead of JSON");
+    }
   };
 
+  // Fetch posts
   const fetchPosts = async () => {
     try {
       const data = await safeFetch(`${API_BASE}/api/posts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setPosts(data);
-    } catch (err) { console.error(err.message); }
+    } catch (err) {
+      console.error(err.message);
+    }
   };
 
+  // Fetch friends
   const fetchFriends = async () => {
     try {
       const data = await safeFetch(`${API_BASE}/api/users/friends/${currentUserId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFriendsList(data);
-    } catch (err) { console.error(err.message); }
+    } catch (err) {
+      console.error(err.message);
+    }
   };
 
-  // WebSocket for real-time new posts
+  // WebSocket connection
   useEffect(() => {
-    ws.current = new WebSocket("wss://afribook-backend.onrender.com");
-
+    ws.current = new WebSocket(process.env.REACT_APP_WS_BASE || "wss://your-backend.com"); // replace with live WS
     ws.current.onopen = () => {
       console.log("✅ WebSocket connected");
       if (currentUserId)
@@ -63,8 +71,30 @@ const Home = () => {
     return () => ws.current && ws.current.close();
   }, [currentUserId]);
 
-  useEffect(() => { fetchPosts(); fetchFriends(); }, []);
+  useEffect(() => {
+    fetchPosts();
+    fetchFriends();
+  }, []);
 
+  // Handle media preview
+  const handleMediaChange = (e) => {
+    const files = Array.from(e.target.files);
+    setMediaFiles(files);
+    setMediaPreview(
+      files.map((f) => ({ preview: URL.createObjectURL(f), type: f.type }))
+    );
+  };
+
+  // Tag/untag friends
+  const handleTagFriend = (friend) => {
+    if (!taggedFriends.includes(friend._id)) {
+      setTaggedFriends([...taggedFriends, friend._id]);
+    } else {
+      setTaggedFriends(taggedFriends.filter((id) => id !== friend._id));
+    }
+  };
+
+  // Create new post
   const handleCreatePost = async () => {
     if (!newPost.trim() && mediaFiles.length === 0) return;
 
@@ -82,27 +112,27 @@ const Home = () => {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+
       if (!res.ok) throw new Error("Post failed");
+
       const data = await res.json();
       setPosts((prev) => [data.post, ...prev]);
-      // reset
-      setNewPost(""); setMediaFiles([]); setMediaPreview([]);
-      setFeeling(""); setLocation(""); setTaggedFriends([]); setShowExtras(false);
+
+      // Reset post form
+      setNewPost("");
+      setMediaFiles([]);
+      setMediaPreview([]);
+      setFeeling("");
+      setLocation("");
+      setTaggedFriends([]);
+      setShowExtras(false);
+      setShowEmoji(false);
     } catch (err) {
-      console.error(err); alert("Post failed");
-    } finally { setIsSubmitting(false); }
-  };
-
-  const handleMediaChange = (e) => {
-    const files = Array.from(e.target.files);
-    setMediaFiles(files);
-    setMediaPreview(files.map((f) => ({ preview: URL.createObjectURL(f), type: f.type })));
-  };
-
-  const handleTagFriend = (friend) => {
-    setTaggedFriends(taggedFriends.includes(friend._id) 
-      ? taggedFriends.filter((id) => id !== friend._id)
-      : [...taggedFriends, friend._id]);
+      console.error(err);
+      alert("Failed to create post");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -119,79 +149,99 @@ const Home = () => {
           />
 
           {showExtras && (
-            <div className="mt-2 space-y-2">
-              <div className="flex flex-wrap gap-2">
+            <>
+              {/* Media Preview */}
+              {mediaPreview.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                  {mediaPreview.map((m, i) =>
+                    m.type.startsWith("image") ? (
+                      <img
+                        key={i}
+                        src={m.preview}
+                        alt={`preview-${i}`}
+                        className="w-full h-48 object-cover rounded"
+                      />
+                    ) : (
+                      <video
+                        key={i}
+                        src={m.preview}
+                        controls
+                        className="w-full h-48 rounded object-cover"
+                      />
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* Extra Post Options */}
+              <div className="flex flex-wrap gap-2 mt-2">
                 <input type="file" multiple onChange={handleMediaChange} />
                 <button
                   onClick={() => setShowEmoji(!showEmoji)}
-                  className="bg-gray-200 px-2 rounded"
+                  className="px-3 py-1 bg-gray-200 rounded"
                 >
-                  {showEmoji ? "😀 Hide Emoji" : "😀 Emoji"}
+                  {showEmoji ? "Hide Emoji" : "Add Emoji"}
                 </button>
-                <input
-                  placeholder="Feeling..."
-                  value={feeling}
-                  onChange={(e) => setFeeling(e.target.value)}
-                  className="border px-2 rounded"
-                />
-                <input
-                  placeholder="Location..."
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="border px-2 rounded"
-                />
+                <button
+                  onClick={handleCreatePost}
+                  className="px-4 py-2 bg-blue-500 text-white rounded"
+                >
+                  {isSubmitting ? "Posting..." : "Post"}
+                </button>
               </div>
 
               {/* Emoji Picker */}
               {showEmoji && (
                 <EmojiPicker
-                  onEmojiClick={(e, emojiObj) => setNewPost(newPost + emojiObj.emoji)}
+                  onEmojiClick={(e, emojiObject) =>
+                    setNewPost((prev) => prev + emojiObject.emoji)
+                  }
                 />
               )}
 
-              {/* Friends */}
+              {/* Tag Friends */}
               {friendsList.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex gap-2 mt-2 flex-wrap">
                   {friendsList.map((f) => (
                     <button
                       key={f._id}
-                      onClick={() => handleTagFriend(f)}
-                      className={`px-2 py-1 rounded ${
-                        taggedFriends.includes(f._id) ? "bg-blue-400 text-white" : "bg-gray-200"
+                      className={`px-2 py-1 border rounded ${
+                        taggedFriends.includes(f._id) ? "bg-blue-200" : "bg-gray-100"
                       }`}
+                      onClick={() => handleTagFriend(f)}
                     >
                       {f.name}
                     </button>
                   ))}
                 </div>
               )}
-
-              {/* Media Preview */}
-              {mediaPreview.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                  {mediaPreview.map((m, i) =>
-                    m.type.startsWith("image") ? (
-                      <img key={i} src={m.preview} alt="preview" className="w-full h-48 object-cover rounded" />
-                    ) : (
-                      <video key={i} src={m.preview} controls className="w-full h-48 object-cover rounded" />
-                    )
-                  )}
-                </div>
-              )}
-
-              <button
-                onClick={handleCreatePost}
-                className="bg-blue-500 text-white px-4 py-2 rounded mt-2"
-              >
-                {isSubmitting ? "Posting..." : "Post"}
-              </button>
-            </div>
+            </>
           )}
         </div>
 
         {/* POSTS */}
         {posts.map((post) => (
-          <PostCard key={post._id} post={post} currentUserId={currentUserId} />
+          <PostCard
+            key={post._id}
+            post={post}
+            currentUserId={currentUserId}
+            onLike={async (postId) => {
+              await fetch(`${API_BASE}/api/posts/${postId}/like`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              fetchPosts();
+            }}
+            onComment={async (postId, text) => {
+              // Implement comment API if available
+              console.log("Comment on", postId, text);
+            }}
+            onShare={(post) => {
+              // Simple share link
+              navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
+              alert("Post link copied!");
+            }}
+          />
         ))}
       </div>
     </div>
