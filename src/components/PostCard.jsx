@@ -5,12 +5,13 @@ import { API_BASE } from "../api/api";
 const PostCard = ({ post, currentUserId, onLike, onComment, onShare }) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [modalIndex, setModalIndex] = useState(null); // null = modal closed
+  const [modalIndex, setModalIndex] = useState(null);
 
   const likedByUser = post.likes?.includes(currentUserId);
   const user = post.user || {
     name: "Deleted User",
     profilePic: `${API_BASE}/uploads/profiles/default-profile.png`,
+    _id: null,
   };
 
   const handleCommentSubmit = (e) => {
@@ -23,12 +24,8 @@ const PostCard = ({ post, currentUserId, onLike, onComment, onShare }) => {
   const openModal = (index) => setModalIndex(index);
   const closeModal = () => setModalIndex(null);
 
-  const prevMedia = () => {
-    setModalIndex((prev) => (prev === 0 ? post.media.length - 1 : prev - 1));
-  };
-  const nextMedia = () => {
-    setModalIndex((prev) => (prev === post.media.length - 1 ? 0 : prev + 1));
-  };
+  const prevMedia = () => setModalIndex((prev) => (prev === 0 ? post.media.length - 1 : prev - 1));
+  const nextMedia = () => setModalIndex((prev) => (prev === post.media.length - 1 ? 0 : prev + 1));
 
   return (
     <div className="bg-white p-4 rounded shadow space-y-3">
@@ -47,7 +44,24 @@ const PostCard = ({ post, currentUserId, onLike, onComment, onShare }) => {
       </div>
 
       {/* CONTENT */}
-      <div className="text-gray-700">{post.content}</div>
+      <div className="text-gray-700 space-y-1">
+        <p>{post.content}</p>
+        {post.feeling && <p className="text-gray-500 text-sm">Feeling {post.feeling}</p>}
+        {post.location && <p className="text-gray-500 text-sm">📍 {post.location}</p>}
+        {post.taggedFriends?.length > 0 && (
+          <p className="text-gray-500 text-sm">
+            With:{" "}
+            {post.taggedFriends.map((f, i) => (
+              <React.Fragment key={f._id}>
+                <Link to={`/profile/${f._id}`} className="hover:underline">
+                  {f.name}
+                </Link>
+                {i < post.taggedFriends.length - 1 && ", "}
+              </React.Fragment>
+            ))}
+          </p>
+        )}
+      </div>
 
       {/* MEDIA */}
       {post.media?.length > 0 && (
@@ -74,20 +88,11 @@ const PostCard = ({ post, currentUserId, onLike, onComment, onShare }) => {
         </div>
       )}
 
-      {/* TAGGED FRIENDS */}
-      {post.taggedFriends?.length > 0 && (
-        <div className="text-sm text-gray-500">
-          Tagged: {post.taggedFriends.map((f) => f.name).join(", ")}
-        </div>
-      )}
-
       {/* ACTIONS */}
       <div className="flex items-center gap-4 mt-2 text-sm">
         <button
           onClick={() => onLike && onLike(post._id)}
-          className={`px-2 py-1 rounded ${
-            likedByUser ? "bg-red-400 text-white" : "bg-gray-200"
-          }`}
+          className={`px-2 py-1 rounded ${likedByUser ? "bg-red-400 text-white" : "bg-gray-200"}`}
         >
           {likedByUser ? "❤️ Liked" : "🤍 Like"} ({post.likes?.length || 0})
         </button>
@@ -130,7 +135,10 @@ const PostCard = ({ post, currentUserId, onLike, onComment, onShare }) => {
                 onChange={(e) => setCommentText(e.target.value)}
                 className="flex-1 border rounded px-2 py-1 text-sm"
               />
-              <button type="submit" className="px-3 py-1 bg-blue-500 text-white rounded text-sm">
+              <button
+                type="submit"
+                className="px-3 py-1 bg-blue-500 text-white rounded text-sm"
+              >
                 Send
               </button>
             </form>
