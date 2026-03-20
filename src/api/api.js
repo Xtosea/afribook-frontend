@@ -1,5 +1,5 @@
 // src/api/api.js
-// src/api/config.js
+
 export const API_BASE = "https://afribook-backend.onrender.com";
 
 export const fetchWithToken = async (url, token, options = {}) => {
@@ -24,19 +24,40 @@ export const fetchWithToken = async (url, token, options = {}) => {
       },
     });
 
-    // Handle no-content responses
+    // ✅ Auto logout if token expired / invalid
+    if (res.status === 401) {
+      console.warn("🔒 Session expired. Logging out...");
+      localStorage.removeItem("token");
+      localStorage.removeItem("userId");
+      window.location.href = "/login";
+      return;
+    }
+
+    // ✅ Handle no-content responses
     if (res.status === 204) return null;
 
-    // Try parsing JSON
-    const data = await res.json();
+    // ✅ Safe JSON parsing (prevents crash)
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
 
+    // ✅ Handle errors properly
     if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}, message: ${data.error || data.message}`);
+      const message =
+        data?.error ||
+        data?.message ||
+        "Something went wrong";
+
+      throw new Error(`HTTP ${res.status}: ${message}`);
     }
 
     return data;
+
   } catch (err) {
-    console.error("fetchWithToken ERROR:", err);
+    console.error("❌ fetchWithToken ERROR:", err.message);
     throw err;
   }
 };
