@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { API_URL } from "../api/api"; // ✅ Correct
+import { API_BASE } from "../api/api"; // ✅ Correct
 
 const PostCard = ({ post, onLike, onComment, currentUserId }) => {
   const [commentText, setCommentText] = useState("");
