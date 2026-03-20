@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import PostCard from "../components/PostCard";
 import EmojiPicker from "emoji-picker-react";
 
-import { API_URL } from "../api/api"; // ✅ Correct
+import { API_BASE } from "../api/api"; // ✅ Correct
 
 const Home = () => {
   const [posts, setPosts] = useState([]);
