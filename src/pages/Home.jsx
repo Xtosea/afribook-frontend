@@ -55,22 +55,50 @@ const Home = () => {
   };
 
   // WebSocket connection
-  useEffect(() => {
-    ws.current = new WebSocket(process.env.REACT_APP_WS_BASE || "wss:https://afribook-backend.onrender.com"); // replace with live WS
-    ws.current.onopen = () => {
-      console.log("✅ WebSocket connected");
-      if (currentUserId)
-        ws.current.send(JSON.stringify({ type: "REGISTER", userId: currentUserId }));
-    };
+useEffect(() => {
+  const wsUrl =
+    process.env.REACT_APP_WS_BASE || 
+    (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
 
-    ws.current.onmessage = (event) => {
+  const socket = new WebSocket(wsUrl);
+  ws.current = socket;
+
+  socket.onopen = () => {
+    console.log("✅ WebSocket connected");
+    if (currentUserId) {
+      socket.send(JSON.stringify({ type: "REGISTER", userId: currentUserId }));
+    }
+  };
+
+  socket.onmessage = (event) => {
+    try {
       const data = JSON.parse(event.data);
-      if (data.type === "NEW_POST") setPosts((prev) => [data.post, ...prev]);
-    };
+      if (data.type === "NEW_POST") {
+        setPosts((prev) => [data.post, ...prev]);
+      }
+    } catch (err) {
+      console.error("WS MESSAGE ERROR:", err);
+    }
+  };
 
-    return () => ws.current && ws.current.close();
-  }, [currentUserId]);
+  socket.onclose = () => {
+    console.log("❌ WebSocket disconnected, trying to reconnect in 3s...");
+    setTimeout(() => {
+      if (ws.current === socket) {
+        ws.current = null;
+        // Reconnect
+        // We can call the same useEffect logic, but easier to reload the page or implement full reconnection logic
+        window.location.reload();
+      }
+    }, 3000);
+  };
 
+  socket.onerror = (err) => console.error("WS ERROR:", err);
+
+  return () => {
+    socket.close();
+  };
+}, [currentUserId]);
   useEffect(() => {
     fetchPosts();
     fetchFriends();
