@@ -20,6 +20,7 @@ const Home = () => {
   const token = localStorage.getItem("token");
   const currentUserId = localStorage.getItem("userId");
 
+  // Safe fetch helper
   const safeFetch = async (url, options = {}) => {
     const res = await fetch(url, options);
     const text = await res.text();
@@ -53,56 +54,6 @@ const Home = () => {
       console.error(err.message);
     }
   };
-
-  // WebSocket connection
-useEffect(() => {
-  const wsUrl =
-    process.env.REACT_APP_WS_BASE || 
-    (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
-
-  const socket = new WebSocket(wsUrl);
-  ws.current = socket;
-
-  socket.onopen = () => {
-    console.log("✅ WebSocket connected");
-    if (currentUserId) {
-      socket.send(JSON.stringify({ type: "REGISTER", userId: currentUserId }));
-    }
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === "NEW_POST") {
-        setPosts((prev) => [data.post, ...prev]);
-      }
-    } catch (err) {
-      console.error("WS MESSAGE ERROR:", err);
-    }
-  };
-
-  socket.onclose = () => {
-    console.log("❌ WebSocket disconnected, trying to reconnect in 3s...");
-    setTimeout(() => {
-      if (ws.current === socket) {
-        ws.current = null;
-        // Reconnect
-        // We can call the same useEffect logic, but easier to reload the page or implement full reconnection logic
-        window.location.reload();
-      }
-    }, 3000);
-  };
-
-  socket.onerror = (err) => console.error("WS ERROR:", err);
-
-  return () => {
-    socket.close();
-  };
-}, [currentUserId]);
-  useEffect(() => {
-    fetchPosts();
-    fetchFriends();
-  }, []);
 
   // Handle media preview
   const handleMediaChange = (e) => {
@@ -144,9 +95,10 @@ useEffect(() => {
       if (!res.ok) throw new Error("Post failed");
 
       const data = await res.json();
+      // Add post immediately for instant UI feedback
       setPosts((prev) => [data.post, ...prev]);
 
-      // Reset post form
+      // Reset form
       setNewPost("");
       setMediaFiles([]);
       setMediaPreview([]);
@@ -155,6 +107,11 @@ useEffect(() => {
       setTaggedFriends([]);
       setShowExtras(false);
       setShowEmoji(false);
+
+      // Notify WebSocket about new post
+      if (ws.current && ws.current.readyState === 1) {
+        ws.current.send(JSON.stringify({ type: "NEW_POST", post: data.post }));
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to create post");
@@ -162,6 +119,127 @@ useEffect(() => {
       setIsSubmitting(false);
     }
   };
+
+  // Like a post
+  const handleLike = async (postId) => {
+    try {
+      await fetch(`${API_BASE}/api/posts/${postId}/like`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // Update UI instantly
+      setPosts((prev) =>
+        prev.map((p) =>
+          p._id === postId
+            ? {
+                ...p,
+                likes: p.likes.includes(currentUserId)
+                  ? p.likes.filter((id) => id !== currentUserId)
+                  : [...p.likes, currentUserId],
+              }
+            : p
+        )
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Comment on a post
+  const handleComment = async (postId, text) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/posts/${postId}/comment`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("Comment failed");
+      const data = await res.json();
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          p._id === postId
+            ? { ...p, comments: [...(p.comments || []), data.comment] }
+            : p
+        )
+      );
+
+      // Notify WS about new comment
+      if (ws.current && ws.current.readyState === 1) {
+        ws.current.send(JSON.stringify({ type: "NEW_COMMENT", postId, comment: data.comment }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // WebSocket connection for live updates
+  useEffect(() => {
+    const wsUrl =
+      process.env.REACT_APP_WS_BASE ||
+      (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
+
+    const socket = new WebSocket(wsUrl);
+    ws.current = socket;
+
+    socket.onopen = () => {
+      console.log("✅ WebSocket connected");
+      if (currentUserId) socket.send(JSON.stringify({ type: "REGISTER", userId: currentUserId }));
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        switch (data.type) {
+          case "NEW_POST":
+            setPosts((prev) => [data.post, ...prev]);
+            break;
+          case "NEW_COMMENT":
+            setPosts((prev) =>
+              prev.map((p) =>
+                p._id === data.postId
+                  ? { ...p, comments: [...(p.comments || []), data.comment] }
+                  : p
+              )
+            );
+            break;
+          case "POST_LIKED":
+            setPosts((prev) =>
+              prev.map((p) =>
+                p._id === data.postId ? { ...p, likes: data.likes } : p
+              )
+            );
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error("WS MESSAGE ERROR:", err);
+      }
+    };
+
+    socket.onclose = () => {
+      console.log("❌ WebSocket disconnected, reconnecting in 3s...");
+      setTimeout(() => {
+        if (ws.current === socket) {
+          ws.current = null;
+          window.location.reload(); // or implement reconnect logic
+        }
+      }, 3000);
+    };
+
+    socket.onerror = (err) => console.error("WS ERROR:", err);
+
+    return () => socket.close();
+  }, [currentUserId]);
+
+  useEffect(() => {
+    fetchPosts();
+    fetchFriends();
+  }, []);
 
   return (
     <div className="container mx-auto py-4 flex flex-col lg:flex-row gap-6">
@@ -253,19 +331,9 @@ useEffect(() => {
             key={post._id}
             post={post}
             currentUserId={currentUserId}
-            onLike={async (postId) => {
-              await fetch(`${API_BASE}/api/posts/${postId}/like`, {
-                method: "PUT",
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              fetchPosts();
-            }}
-            onComment={async (postId, text) => {
-              // Implement comment API if available
-              console.log("Comment on", postId, text);
-            }}
+            onLike={handleLike}
+            onComment={handleComment}
             onShare={(post) => {
-              // Simple share link
               navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
               alert("Post link copied!");
             }}
