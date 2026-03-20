@@ -1,6 +1,6 @@
 // src/api/api.js
 // src/api/config.js
-export const API_BASE = "https://afribook-backend.onrender.com/api";
+export const API_BASE = "https://afribook-backend.onrender.com";
 
 export const fetchWithToken = async (url, token, options = {}) => {
   try {
