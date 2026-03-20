@@ -105,7 +105,7 @@ const Profile = () => {
         { method: "PUT", body: formData }
       );
 
-      setUser(updatedUser.user);
+      setUser(updatedUser.user || updatedUser);
       setProfilePic(null);
       setCoverPhoto(null);
       setIsEditing(false);
