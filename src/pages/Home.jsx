@@ -56,7 +56,7 @@ const Home = () => {
 
   // WebSocket connection
   useEffect(() => {
-    ws.current = new WebSocket(process.env.REACT_APP_WS_BASE || "wss://your-backend.com"); // replace with live WS
+    ws.current = new WebSocket(process.env.REACT_APP_WS_BASE || "wss:https://afribook-backend.onrender.com"); // replace with live WS
     ws.current.onopen = () => {
       console.log("✅ WebSocket connected");
       if (currentUserId)
