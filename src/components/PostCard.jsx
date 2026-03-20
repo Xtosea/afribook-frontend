@@ -1,12 +1,15 @@
 import React, { useState } from "react";
-import { API_BASE } from "../api/api"; // ✅ Correct
+import { API_BASE } from "../api/config";
 
-const PostCard = ({ post, onLike, onComment, currentUserId }) => {
+const PostCard = ({ post, currentUserId, onLike, onComment }) => {
   const [commentText, setCommentText] = useState("");
   const [showComments, setShowComments] = useState(false);
 
   const likedByUser = post.likes?.includes(currentUserId);
-  const user = post.user || { name: "Deleted User", profilePic: `${API_BASE}/uploads/profiles/default-profile.png` };
+  const user = post.user || { 
+    name: "Deleted User", 
+    profilePic: `${API_BASE}/uploads/profiles/default-profile.png` 
+  };
 
   const handleLikeClick = () => onLike && onLike(post._id);
 
@@ -22,7 +25,7 @@ const PostCard = ({ post, onLike, onComment, currentUserId }) => {
       {/* USER */}
       <div className="flex items-center gap-3">
         <img
-          src={user.profilePic || `${API_BASE}/uploads/profiles/default-profile.png`}
+          src={user.profilePic.startsWith("http") ? user.profilePic : `${API_BASE}${user.profilePic}`}
           alt="profile"
           className="w-10 h-10 rounded-full object-cover"
         />
@@ -41,14 +44,14 @@ const PostCard = ({ post, onLike, onComment, currentUserId }) => {
                 key={i}
                 src={m.url.startsWith("http") ? m.url : `${API_BASE}${m.url}`}
                 alt={`media-${i}`}
-                className="w-full rounded object-cover"
+                className="w-full h-48 object-cover rounded"
               />
             ) : (
               <video
                 key={i}
                 src={m.url.startsWith("http") ? m.url : `${API_BASE}${m.url}`}
                 controls
-                className="w-full rounded"
+                className="w-full h-48 object-cover rounded"
               />
             )
           )}
@@ -70,7 +73,6 @@ const PostCard = ({ post, onLike, onComment, currentUserId }) => {
         >
           {likedByUser ? "❤️ Liked" : "🤍 Like"} ({post.likes?.length || 0})
         </button>
-
         <button
           onClick={() => setShowComments(!showComments)}
           className="px-2 py-1 bg-gray-200 rounded"
@@ -92,8 +94,6 @@ const PostCard = ({ post, onLike, onComment, currentUserId }) => {
               </div>
             ))
           )}
-
-          {/* ADD COMMENT */}
           {onComment && (
             <form onSubmit={handleCommentSubmit} className="flex gap-2 mt-1">
               <input
